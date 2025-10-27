@@ -518,6 +518,7 @@ function App() {
                 ) : gestureData.current_shape ? (
                   <div className="text-center">
                     <p className="text-white font-bold text-sm mb-3">SELECT A SHAPE:</p>
+                    <p className="text-yellow-300 text-xs mb-2">⏱️ Shapes change every 4 seconds</p>
                     
                     {/* Shape selector with all shapes */}
                     <div className="grid grid-cols-2 gap-2 mb-3">
@@ -528,7 +529,7 @@ function App() {
                             key={shape}
                             className={`flex flex-col items-center justify-center p-3 rounded-lg border-2 transition-all ${
                               isActive 
-                                ? 'border-cyan-400 bg-cyan-500/30 scale-110 animate-pulse' 
+                                ? 'border-cyan-400 bg-cyan-500/30 scale-110 shadow-lg shadow-cyan-500/50' 
                                 : 'border-gray-600 bg-gray-700/20'
                             }`}
                           >
@@ -554,13 +555,20 @@ function App() {
                             <p className={`text-xs font-bold ${isActive ? 'text-cyan-300' : 'text-gray-500'}`}>
                               {shape.toUpperCase()}
                             </p>
+                            {/* Active indicator */}
+                            {isActive && (
+                              <div className="mt-1">
+                                <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></div>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
                     </div>
                     
                     <div className="bg-cyan-500/20 border border-cyan-500 rounded p-2 mb-2">
-                      <p className="text-xs text-cyan-300 font-bold">✋ OPEN PALM TO SELECT</p>
+                      <p className="text-xs text-cyan-300 font-bold">✋ OPEN PALM TO SELECT CURRENT SHAPE</p>
+                      <p className="text-xs text-gray-400 mt-1">Watch the progress bar on camera!</p>
                     </div>
                     <p className="text-xs text-gray-400">👍 Thumbs Up (2s): Exit</p>
                   </div>

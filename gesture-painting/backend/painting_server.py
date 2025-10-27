@@ -67,7 +67,8 @@ class GesturePainter:
         self.thumbs_up_hold_start = 0
         self.thumbs_up_hold_time = 2.0  # 2 seconds to activate shape mode
         self.shape_cycle_start = 0
-        self.shape_cycle_interval = 2.0  # Cycle through shapes every 2 seconds
+        self.shape_cycle_interval = 4.0  # Cycle through shapes every 4 seconds (slower, more predictable)
+        self.shape_cycle_initial_delay = 2.0  # 2 second pause before first cycle
         self.shapes = ["circle", "rectangle", "triangle", "line"]
         self.current_shape_index = 0
         self.selected_shape = None
@@ -259,7 +260,7 @@ class GesturePainter:
                         # Visual feedback - yellow circle
                         cv2.circle(frame, (tip_x, tip_y), 12, (0, 255, 255), -1)
                         cv2.circle(frame, (tip_x, tip_y), 16, (255, 255, 255), 2)
-                        
+
                 elif gesture == "fist":
                     # Finalize shape drawing
                     if self.selected_shape and self.shape_start_pos is not None:
@@ -274,7 +275,7 @@ class GesturePainter:
                         # Reset shape drawing state but keep shape selected
                         self.shape_start_pos = None
                         self.shape_preview_active = False
-                        
+
                         # Visual feedback
                         cv2.circle(frame, (tip_x, tip_y), 20, (0, 255, 0), 3)
                 else:
@@ -287,9 +288,17 @@ class GesturePainter:
                         self.shape_cycle_start = current_time
 
                     elapsed = current_time - self.shape_cycle_start
-                    self.current_shape_index = int(
-                        elapsed / self.shape_cycle_interval
-                    ) % len(self.shapes)
+                    
+                    # Apply initial delay before starting to cycle
+                    if elapsed >= self.shape_cycle_initial_delay:
+                        adjusted_elapsed = elapsed - self.shape_cycle_initial_delay
+                        self.current_shape_index = int(
+                            adjusted_elapsed / self.shape_cycle_interval
+                        ) % len(self.shapes)
+                    else:
+                        # Stay on first shape during initial delay
+                        self.current_shape_index = 0
+                    
                     self.shape_cycling = True
 
             # === NORMAL MODE LOGIC ===
@@ -445,29 +454,89 @@ class GesturePainter:
                             bar_w = int(w * 0.4)
                             bar_x = (w - bar_w) // 2
                             bar_y = h - 120
-                            
+
                             # Dark background box
-                            cv2.rectangle(frame, (bar_x - 20, bar_y - 50), (bar_x + bar_w + 20, bar_y + 30), (30, 30, 30), -1)
-                            cv2.rectangle(frame, (bar_x - 20, bar_y - 50), (bar_x + bar_w + 20, bar_y + 30), (0, 255, 255), 3)
-                            
+                            cv2.rectangle(
+                                frame,
+                                (bar_x - 20, bar_y - 50),
+                                (bar_x + bar_w + 20, bar_y + 30),
+                                (30, 30, 30),
+                                -1,
+                            )
+                            cv2.rectangle(
+                                frame,
+                                (bar_x - 20, bar_y - 50),
+                                (bar_x + bar_w + 20, bar_y + 30),
+                                (0, 255, 255),
+                                3,
+                            )
+
                             # Show current and next color
                             next_color_index = (self.color_index + 1) % len(self.colors)
                             current_bgr = self._hex_to_bgr(self.current_color)
                             next_bgr = self._hex_to_bgr(self.colors[next_color_index])
-                            
+
                             # Current color box
-                            cv2.rectangle(frame, (bar_x, bar_y - 40), (bar_x + 40, bar_y - 10), current_bgr, -1)
-                            cv2.rectangle(frame, (bar_x, bar_y - 40), (bar_x + 40, bar_y - 10), (255, 255, 255), 2)
-                            cv2.putText(frame, "NOW", (bar_x + 5, bar_y - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
-                            
+                            cv2.rectangle(
+                                frame,
+                                (bar_x, bar_y - 40),
+                                (bar_x + 40, bar_y - 10),
+                                current_bgr,
+                                -1,
+                            )
+                            cv2.rectangle(
+                                frame,
+                                (bar_x, bar_y - 40),
+                                (bar_x + 40, bar_y - 10),
+                                (255, 255, 255),
+                                2,
+                            )
+                            cv2.putText(
+                                frame,
+                                "NOW",
+                                (bar_x + 5, bar_y - 15),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.3,
+                                (255, 255, 255),
+                                1,
+                            )
+
                             # Arrow
-                            cv2.putText(frame, "->", (bar_x + 50, bar_y - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-                            
+                            cv2.putText(
+                                frame,
+                                "->",
+                                (bar_x + 50, bar_y - 20),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.5,
+                                (255, 255, 255),
+                                2,
+                            )
+
                             # Next color box (pulsing)
-                            cv2.rectangle(frame, (bar_x + 80, bar_y - 40), (bar_x + 120, bar_y - 10), next_bgr, -1)
-                            cv2.rectangle(frame, (bar_x + 80, bar_y - 40), (bar_x + 120, bar_y - 10), (0, 255, 255), 3)
-                            cv2.putText(frame, "NEXT", (bar_x + 82, bar_y - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 255, 255), 1)
-                            
+                            cv2.rectangle(
+                                frame,
+                                (bar_x + 80, bar_y - 40),
+                                (bar_x + 120, bar_y - 10),
+                                next_bgr,
+                                -1,
+                            )
+                            cv2.rectangle(
+                                frame,
+                                (bar_x + 80, bar_y - 40),
+                                (bar_x + 120, bar_y - 10),
+                                (0, 255, 255),
+                                3,
+                            )
+                            cv2.putText(
+                                frame,
+                                "NEXT",
+                                (bar_x + 82, bar_y - 15),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.3,
+                                (0, 255, 255),
+                                1,
+                            )
+
                             # Progress bar
                             cv2.rectangle(
                                 frame,
@@ -603,24 +672,26 @@ class GesturePainter:
     def _draw_shape_icon(self, frame, x, y, shape, color, size, filled=False):
         """Draw a shape icon for visual preview"""
         thickness = 3 if filled else 2
-        
+
         if shape == "circle":
             cv2.circle(frame, (x, y), size // 2, color, thickness)
         elif shape == "rectangle":
             half = size // 2
-            cv2.rectangle(frame, (x - half, y - half), (x + half, y + half), color, thickness)
+            cv2.rectangle(
+                frame, (x - half, y - half), (x + half, y + half), color, thickness
+            )
         elif shape == "triangle":
             half = size // 2
-            pts = np.array([
-                [x, y - half],
-                [x + half, y + half],
-                [x - half, y + half]
-            ], np.int32)
+            pts = np.array(
+                [[x, y - half], [x + half, y + half], [x - half, y + half]], np.int32
+            )
             pts = pts.reshape((-1, 1, 2))
             cv2.polylines(frame, [pts], True, color, thickness)
         elif shape == "line":
             half = size // 2
-            cv2.line(frame, (x - half, y + half), (x + half, y - half), color, thickness)
+            cv2.line(
+                frame, (x - half, y + half), (x + half, y - half), color, thickness
+            )
 
     def _draw_ui(self, frame):
         """Draw UI overlay"""
@@ -678,10 +749,12 @@ class GesturePainter:
                     (0, 255, 0),
                     2,
                 )
-                
+
                 # Draw shape preview icon
-                self._draw_shape_icon(frame, w // 2, h - 210, self.selected_shape, (0, 255, 0), 40, True)
-                
+                self._draw_shape_icon(
+                    frame, w // 2, h - 210, self.selected_shape, (0, 255, 0), 40, True
+                )
+
                 if self.shape_preview_active:
                     cv2.putText(
                         frame,
@@ -722,34 +795,101 @@ class GesturePainter:
                     (255, 255, 255),
                     2,
                 )
-                
+
                 # Draw all shape icons horizontally
                 shape_spacing = 100
                 start_x = w // 2 - (len(self.shapes) * shape_spacing) // 2 + 50
                 for i, shape in enumerate(self.shapes):
                     x_pos = start_x + i * shape_spacing
                     y_pos = h - 210
-                    
+
                     # Highlight current shape
                     if i == self.current_shape_index:
                         color = (0, 255, 255)  # Cyan for selected
                         size = 50
                         # Pulsing highlight box
-                        cv2.rectangle(frame, (x_pos - 40, y_pos - 40), (x_pos + 40, y_pos + 40), color, 3)
-                        cv2.putText(frame, shape.upper()[:4], (x_pos - 30, y_pos + 60), 
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                        cv2.rectangle(
+                            frame,
+                            (x_pos - 40, y_pos - 40),
+                            (x_pos + 40, y_pos + 40),
+                            color,
+                            3,
+                        )
+                        cv2.putText(
+                            frame,
+                            shape.upper()[:4],
+                            (x_pos - 30, y_pos + 60),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.5,
+                            color,
+                            2,
+                        )
                     else:
                         color = (150, 150, 150)  # Gray for others
                         size = 35
-                        cv2.putText(frame, shape.upper()[:4], (x_pos - 30, y_pos + 60), 
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
+                        cv2.putText(
+                            frame,
+                            shape.upper()[:4],
+                            (x_pos - 30, y_pos + 60),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.4,
+                            color,
+                            1,
+                        )
+
+                    self._draw_shape_icon(
+                        frame,
+                        x_pos,
+                        y_pos,
+                        shape,
+                        color,
+                        size,
+                        i == self.current_shape_index,
+                    )
+
+                # Show cycle progress indicator
+                if self.shape_cycle_start > 0:
+                    import time
+                    current_time = time.time()
+                    elapsed = current_time - self.shape_cycle_start
                     
-                    self._draw_shape_icon(frame, x_pos, y_pos, shape, color, size, i == self.current_shape_index)
-                
+                    # Calculate progress within current cycle
+                    if elapsed < self.shape_cycle_initial_delay:
+                        # Initial delay progress
+                        cycle_progress = elapsed / self.shape_cycle_initial_delay
+                        status_text = "LOADING..."
+                        bar_color = (255, 255, 0)  # Yellow for initial delay
+                    else:
+                        # Regular cycle progress
+                        adjusted_elapsed = elapsed - self.shape_cycle_initial_delay
+                        time_in_cycle = adjusted_elapsed % self.shape_cycle_interval
+                        cycle_progress = time_in_cycle / self.shape_cycle_interval
+                        next_shape_index = (self.current_shape_index + 1) % len(self.shapes)
+                        status_text = f"NEXT: {self.shapes[next_shape_index].upper()}"
+                        bar_color = (255, 165, 0)  # Orange for regular cycle
+                    
+                    # Draw progress bar
+                    bar_w = 300
+                    bar_h = 12
+                    bar_x = (w - bar_w) // 2
+                    bar_y = h - 150
+                    
+                    # Background
+                    cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (50, 50, 50), -1)
+                    # Progress
+                    cv2.rectangle(frame, (bar_x, bar_y), (bar_x + int(bar_w * cycle_progress), bar_y + bar_h), bar_color, -1)
+                    # Border
+                    cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (255, 255, 255), 1)
+                    
+                    # Status text above progress bar
+                    text_size = cv2.getTextSize(status_text, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)[0]
+                    text_x = bar_x + (bar_w - text_size[0]) // 2
+                    cv2.putText(frame, status_text, (text_x, bar_y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, bar_color, 1)
+
                 cv2.putText(
                     frame,
                     "OPEN PALM TO SELECT",
-                    (w // 2 - 120, h - 150),
+                    (w // 2 - 120, h - 175),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.6,
                     (0, 255, 255),
