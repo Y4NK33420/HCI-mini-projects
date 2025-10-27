@@ -454,11 +454,11 @@ function App() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-lg">✌️</span>
-                  <span>Peace (1s) → Color</span>
+                  <span className="font-bold text-cyan-300">Peace (2s) → Color</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-lg">👍</span>
-                  <span>Thumbs Up (1s) → Shapes</span>
+                  <span className="font-bold text-orange-300">Thumbs Up (2s) → Shapes</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-lg">✋</span>
@@ -477,34 +477,92 @@ function App() {
             
             {/* Shape Mode Indicator */}
             {gestureData?.shape_mode_active && (
-              <div className="bg-gradient-to-br from-orange-500/30 to-yellow-500/30 border-2 border-orange-500/50 rounded-lg p-3 mt-3">
-                <h3 className="font-bold text-orange-300 mb-2 text-center">🔷 SHAPE MODE ACTIVE</h3>
+              <div className="bg-gradient-to-br from-orange-500/30 to-yellow-500/30 border-2 border-orange-500/50 rounded-lg p-4 mt-3">
+                <h3 className="font-bold text-orange-300 mb-3 text-center text-base">🔷 SHAPE MODE ACTIVE</h3>
                 {gestureData.selected_shape ? (
                   <div className="text-center">
-                    <p className="text-green-300 font-bold text-lg mb-1">
-                      ✓ {gestureData.selected_shape.toUpperCase()}
-                    </p>
+                    <div className="bg-green-500/20 border border-green-500 rounded-lg p-3 mb-2">
+                      <p className="text-green-300 font-bold text-xl mb-2">
+                        ✓ SELECTED: {gestureData.selected_shape.toUpperCase()}
+                      </p>
+                      {/* Large shape icon */}
+                      <div className="flex justify-center my-3">
+                        {gestureData.selected_shape === 'circle' && (
+                          <div className="w-16 h-16 border-4 border-green-400 rounded-full"></div>
+                        )}
+                        {gestureData.selected_shape === 'rectangle' && (
+                          <div className="w-16 h-16 border-4 border-green-400"></div>
+                        )}
+                        {gestureData.selected_shape === 'triangle' && (
+                          <div className="w-0 h-0 border-l-[32px] border-l-transparent border-r-[32px] border-r-transparent border-b-[56px] border-b-green-400"></div>
+                        )}
+                        {gestureData.selected_shape === 'line' && (
+                          <div className="w-16 h-0.5 bg-green-400 self-center" style={{transform: 'rotate(45deg)'}}></div>
+                        )}
+                      </div>
+                    </div>
                     {gestureData.shape_preview_active ? (
-                      <>
+                      <div className="bg-yellow-500/20 border border-yellow-500 rounded p-2">
                         <p className="text-xs text-yellow-300 font-bold mb-1">📐 DRAWING SHAPE...</p>
                         <p className="text-xs text-gray-300">✊ Fist: Finalize</p>
                         <p className="text-xs text-gray-300">✋ Palm: Cancel</p>
-                      </>
+                      </div>
                     ) : (
                       <>
                         <p className="text-xs text-gray-300">☝️ Index: Start Drawing</p>
                         <p className="text-xs text-gray-300">✋ Palm: Change Shape</p>
                       </>
                     )}
-                    <p className="text-xs text-gray-400 mt-1">👍 Thumbs Up (1s): Exit</p>
+                    <p className="text-xs text-gray-400 mt-2">👍 Thumbs Up (2s): Exit</p>
                   </div>
                 ) : gestureData.current_shape ? (
                   <div className="text-center">
-                    <p className="text-yellow-300 font-bold text-lg animate-pulse mb-1">
-                      ≫ {gestureData.current_shape.toUpperCase()} ≪
-                    </p>
-                    <p className="text-xs text-cyan-300 font-bold">✋ OPEN PALM TO SELECT</p>
-                    <p className="text-xs text-gray-400 mt-1">👍 Thumbs Up (1s): Exit</p>
+                    <p className="text-white font-bold text-sm mb-3">SELECT A SHAPE:</p>
+                    
+                    {/* Shape selector with all shapes */}
+                    <div className="grid grid-cols-2 gap-2 mb-3">
+                      {['circle', 'rectangle', 'triangle', 'line'].map((shape) => {
+                        const isActive = shape === gestureData.current_shape;
+                        return (
+                          <div
+                            key={shape}
+                            className={`flex flex-col items-center justify-center p-3 rounded-lg border-2 transition-all ${
+                              isActive 
+                                ? 'border-cyan-400 bg-cyan-500/30 scale-110 animate-pulse' 
+                                : 'border-gray-600 bg-gray-700/20'
+                            }`}
+                          >
+                            {/* Shape icon */}
+                            <div className="mb-1">
+                              {shape === 'circle' && (
+                                <div className={`w-10 h-10 border-3 rounded-full ${isActive ? 'border-cyan-400' : 'border-gray-500'}`}></div>
+                              )}
+                              {shape === 'rectangle' && (
+                                <div className={`w-10 h-10 border-3 ${isActive ? 'border-cyan-400' : 'border-gray-500'}`}></div>
+                              )}
+                              {shape === 'triangle' && (
+                                <div 
+                                  className="w-0 h-0 border-l-[20px] border-l-transparent border-r-[20px] border-r-transparent border-b-[35px]"
+                                  style={{borderBottomColor: isActive ? '#22d3ee' : '#6b7280'}}
+                                ></div>
+                              )}
+                              {shape === 'line' && (
+                                <div className={`w-10 h-0.5 self-center ${isActive ? 'bg-cyan-400' : 'bg-gray-500'}`} style={{transform: 'rotate(45deg)'}}></div>
+                              )}
+                            </div>
+                            {/* Shape name */}
+                            <p className={`text-xs font-bold ${isActive ? 'text-cyan-300' : 'text-gray-500'}`}>
+                              {shape.toUpperCase()}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    
+                    <div className="bg-cyan-500/20 border border-cyan-500 rounded p-2 mb-2">
+                      <p className="text-xs text-cyan-300 font-bold">✋ OPEN PALM TO SELECT</p>
+                    </div>
+                    <p className="text-xs text-gray-400">👍 Thumbs Up (2s): Exit</p>
                   </div>
                 ) : null}
               </div>

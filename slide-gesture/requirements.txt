@@ -3,6 +3,9 @@ opencv-python>=4.8.0
 pyautogui>=0.9.50
 numpy>=1.24.0,<2.0.0
 
+# Windows overlay support (for Mode 1 overlay window)
+pywin32>=306; sys_platform == 'win32'
+
 # MediaPipe - NOTE: Requires Python 3.11 or lower
 # If you're using Python 3.12+, you'll need to create a new venv with Python 3.11
 # mediapipe>=0.10.0

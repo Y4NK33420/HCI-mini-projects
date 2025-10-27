@@ -48,7 +48,7 @@ class GesturePainter:
 
         # Timers
         self.peace_sign_hold_start = 0
-        self.peace_sign_hold_time = 1.0  # 1 second for color change
+        self.peace_sign_hold_time = 2.0  # 2 seconds for color change
         self.peace_sign_cooldown = 0
         self.two_hands_hold_start = 0
         self.two_hands_hold_time = 2.0  # 2 seconds for clear canvas
@@ -65,9 +65,9 @@ class GesturePainter:
         self.shape_mode_active = False
         self.shape_cycling = False
         self.thumbs_up_hold_start = 0
-        self.thumbs_up_hold_time = 1.0  # 1 second to activate shape mode
+        self.thumbs_up_hold_time = 2.0  # 2 seconds to activate shape mode
         self.shape_cycle_start = 0
-        self.shape_cycle_interval = 1.5  # Cycle through shapes every 1.5 seconds
+        self.shape_cycle_interval = 2.0  # Cycle through shapes every 2 seconds
         self.shapes = ["circle", "rectangle", "triangle", "line"]
         self.current_shape_index = 0
         self.selected_shape = None
@@ -440,11 +440,35 @@ class GesturePainter:
                             self.peace_sign_hold_start = 0
                             self.peace_sign_cooldown = current_time  # Start cooldown
                         else:
-                            # Show progress bar
+                            # Show progress bar with color preview
                             progress = hold_duration / self.peace_sign_hold_time
-                            bar_w = int(w * 0.3)
+                            bar_w = int(w * 0.4)
                             bar_x = (w - bar_w) // 2
-                            bar_y = h - 100
+                            bar_y = h - 120
+                            
+                            # Dark background box
+                            cv2.rectangle(frame, (bar_x - 20, bar_y - 50), (bar_x + bar_w + 20, bar_y + 30), (30, 30, 30), -1)
+                            cv2.rectangle(frame, (bar_x - 20, bar_y - 50), (bar_x + bar_w + 20, bar_y + 30), (0, 255, 255), 3)
+                            
+                            # Show current and next color
+                            next_color_index = (self.color_index + 1) % len(self.colors)
+                            current_bgr = self._hex_to_bgr(self.current_color)
+                            next_bgr = self._hex_to_bgr(self.colors[next_color_index])
+                            
+                            # Current color box
+                            cv2.rectangle(frame, (bar_x, bar_y - 40), (bar_x + 40, bar_y - 10), current_bgr, -1)
+                            cv2.rectangle(frame, (bar_x, bar_y - 40), (bar_x + 40, bar_y - 10), (255, 255, 255), 2)
+                            cv2.putText(frame, "NOW", (bar_x + 5, bar_y - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
+                            
+                            # Arrow
+                            cv2.putText(frame, "->", (bar_x + 50, bar_y - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                            
+                            # Next color box (pulsing)
+                            cv2.rectangle(frame, (bar_x + 80, bar_y - 40), (bar_x + 120, bar_y - 10), next_bgr, -1)
+                            cv2.rectangle(frame, (bar_x + 80, bar_y - 40), (bar_x + 120, bar_y - 10), (0, 255, 255), 3)
+                            cv2.putText(frame, "NEXT", (bar_x + 82, bar_y - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 255, 255), 1)
+                            
+                            # Progress bar
                             cv2.rectangle(
                                 frame,
                                 (bar_x, bar_y),
@@ -462,11 +486,11 @@ class GesturePainter:
                             cv2.putText(
                                 frame,
                                 "CHANGING COLOR...",
-                                (bar_x, bar_y - 10),
+                                (bar_x + bar_w - 150, bar_y + 15),
                                 cv2.FONT_HERSHEY_SIMPLEX,
-                                0.5,
-                                (0, 255, 255),
-                                2,
+                                0.4,
+                                (255, 255, 255),
+                                1,
                             )
 
                 elif gesture == "thumb_index":
@@ -576,6 +600,28 @@ class GesturePainter:
         b = int(hex_color[4:6], 16)
         return (b, g, r)
 
+    def _draw_shape_icon(self, frame, x, y, shape, color, size, filled=False):
+        """Draw a shape icon for visual preview"""
+        thickness = 3 if filled else 2
+        
+        if shape == "circle":
+            cv2.circle(frame, (x, y), size // 2, color, thickness)
+        elif shape == "rectangle":
+            half = size // 2
+            cv2.rectangle(frame, (x - half, y - half), (x + half, y + half), color, thickness)
+        elif shape == "triangle":
+            half = size // 2
+            pts = np.array([
+                [x, y - half],
+                [x + half, y + half],
+                [x - half, y + half]
+            ], np.int32)
+            pts = pts.reshape((-1, 1, 2))
+            cv2.polylines(frame, [pts], True, color, thickness)
+        elif shape == "line":
+            half = size // 2
+            cv2.line(frame, (x - half, y + half), (x + half, y - half), color, thickness)
+
     def _draw_ui(self, frame):
         """Draw UI overlay"""
         h, w, _ = frame.shape
@@ -608,35 +654,39 @@ class GesturePainter:
             # Large shape mode banner
             cv2.rectangle(
                 frame,
-                (w // 2 - 200, h - 250),
-                (w // 2 + 200, h - 150),
+                (w // 2 - 250, h - 300),
+                (w // 2 + 250, h - 120),
                 (40, 40, 40),
                 -1,
             )
             cv2.rectangle(
                 frame,
-                (w // 2 - 200, h - 250),
-                (w // 2 + 200, h - 150),
+                (w // 2 - 250, h - 300),
+                (w // 2 + 250, h - 120),
                 (255, 165, 0),
-                3,
+                4,
             )
 
             if self.selected_shape:
-                # Shape selected
+                # Shape selected - draw large preview of selected shape
                 cv2.putText(
                     frame,
-                    f"Selected: {self.selected_shape.upper()}",
-                    (w // 2 - 150, h - 210),
+                    f"SELECTED: {self.selected_shape.upper()}",
+                    (w // 2 - 180, h - 260),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.8,
                     (0, 255, 0),
                     2,
                 )
+                
+                # Draw shape preview icon
+                self._draw_shape_icon(frame, w // 2, h - 210, self.selected_shape, (0, 255, 0), 40, True)
+                
                 if self.shape_preview_active:
                     cv2.putText(
                         frame,
                         "Fist: Finalize | Palm: Cancel",
-                        (w // 2 - 150, h - 180),
+                        (w // 2 - 150, h - 150),
                         cv2.FONT_HERSHEY_SIMPLEX,
                         0.5,
                         (255, 255, 0),
@@ -646,7 +696,7 @@ class GesturePainter:
                     cv2.putText(
                         frame,
                         "Index: Draw Shape",
-                        (w // 2 - 150, h - 180),
+                        (w // 2 - 150, h - 150),
                         cv2.FONT_HERSHEY_SIMPLEX,
                         0.5,
                         (255, 255, 255),
@@ -654,29 +704,52 @@ class GesturePainter:
                     )
                 cv2.putText(
                     frame,
-                    "Thumbs Up (1s): Exit | Palm: Change Shape",
-                    (w // 2 - 200, h - 160),
+                    "Thumbs Up (2s): Exit | Palm: Change Shape",
+                    (w // 2 - 200, h - 130),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.45,
                     (255, 255, 255),
                     1,
                 )
             else:
-                # Cycling through shapes
-                current_shape_name = self.shapes[self.current_shape_index].upper()
+                # Cycling through shapes - show ALL shapes with current one highlighted
                 cv2.putText(
                     frame,
-                    f">>> {current_shape_name} <<<",
-                    (w // 2 - 100, h - 210),
+                    "SELECT A SHAPE",
+                    (w // 2 - 100, h - 270),
                     cv2.FONT_HERSHEY_SIMPLEX,
-                    0.9,
-                    (255, 255, 0),
+                    0.7,
+                    (255, 255, 255),
                     2,
                 )
+                
+                # Draw all shape icons horizontally
+                shape_spacing = 100
+                start_x = w // 2 - (len(self.shapes) * shape_spacing) // 2 + 50
+                for i, shape in enumerate(self.shapes):
+                    x_pos = start_x + i * shape_spacing
+                    y_pos = h - 210
+                    
+                    # Highlight current shape
+                    if i == self.current_shape_index:
+                        color = (0, 255, 255)  # Cyan for selected
+                        size = 50
+                        # Pulsing highlight box
+                        cv2.rectangle(frame, (x_pos - 40, y_pos - 40), (x_pos + 40, y_pos + 40), color, 3)
+                        cv2.putText(frame, shape.upper()[:4], (x_pos - 30, y_pos + 60), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                    else:
+                        color = (150, 150, 150)  # Gray for others
+                        size = 35
+                        cv2.putText(frame, shape.upper()[:4], (x_pos - 30, y_pos + 60), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
+                    
+                    self._draw_shape_icon(frame, x_pos, y_pos, shape, color, size, i == self.current_shape_index)
+                
                 cv2.putText(
                     frame,
-                    "Open Palm: SELECT",
-                    (w // 2 - 120, h - 180),
+                    "OPEN PALM TO SELECT",
+                    (w // 2 - 120, h - 150),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.6,
                     (0, 255, 255),
@@ -684,8 +757,8 @@ class GesturePainter:
                 )
                 cv2.putText(
                     frame,
-                    "Thumbs Up (1s): Exit",
-                    (w // 2 - 120, h - 160),
+                    "Thumbs Up (2s): Exit",
+                    (w // 2 - 120, h - 130),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.5,
                     (255, 255, 255),
@@ -697,10 +770,10 @@ class GesturePainter:
             instructions = [
                 "Index: Draw",
                 "Fist: Erase",
-                "Peace (1s): Color",
+                "Peace (2s): Color",
                 "Two Hands (2s): Clear",
                 "Pinch: Size",
-                "Thumbs Up (1s): Shapes",
+                "Thumbs Up (2s): Shapes",
                 "Palm Swipe L/R: Undo/Redo",
             ]
 
