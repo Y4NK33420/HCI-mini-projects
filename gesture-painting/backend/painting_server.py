@@ -76,10 +76,6 @@ class GesturePainter:
         self.selected_shape = None
         self.shape_start_pos = None
         self.shape_preview_active = False  # Track if we're previewing a shape
-        self.shape_selection_time = 0  # Track when shape was selected
-        self.shape_selection_cooldown = 1.5  # 1.5 second cooldown after selecting
-        self.palm_cancel_hold_start = 0  # Track palm hold for cancel
-        self.palm_cancel_hold_time = 1.0  # 1 second to cancel
 
         # Color palette
         self.colors = [
@@ -224,91 +220,50 @@ class GesturePainter:
                             2,
                         )
 
-                elif gesture == "open_palm":
-                    # Select current shape (if cycling) or cancel shape drawing (if selected with hold)
+                elif gesture == "peace_sign":
+                    # Two fingers - Select current shape (only when cycling)
                     if self.shape_cycling:
-                        # Selecting a shape
                         self.selected_shape = self.shapes[self.current_shape_index]
                         self.shape_cycling = False
                         self.shape_start_pos = None
                         self.shape_preview_active = False
-                        self.shape_selection_time = current_time
-                        self.palm_cancel_hold_start = 0
                         action = {
                             "type": "shape_selected",
                             "shape": self.selected_shape,
                         }
-                    elif self.selected_shape:
-                        # Cancel shape - but requires cooldown + hold timer to prevent loop
-                        time_since_selection = current_time - self.shape_selection_time
+                        # Visual feedback
+                        cv2.putText(
+                            frame,
+                            f"SELECTED: {self.selected_shape.upper()}",
+                            (w // 2 - 120, h // 2),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.8,
+                            (0, 255, 0),
+                            2,
+                        )
 
-                        if time_since_selection < self.shape_selection_cooldown:
-                            # Still in cooldown period after selection
-                            remaining = (
-                                self.shape_selection_cooldown - time_since_selection
-                            )
-                            cv2.putText(
-                                frame,
-                                f"Wait {remaining:.1f}s...",
-                                (w // 2 - 60, h // 2),
-                                cv2.FONT_HERSHEY_SIMPLEX,
-                                0.6,
-                                (255, 255, 0),
-                                2,
-                            )
-                            self.palm_cancel_hold_start = 0
-                        else:
-                            # Cooldown passed, now require hold to cancel
-                            if self.palm_cancel_hold_start == 0:
-                                self.palm_cancel_hold_start = current_time
-
-                            hold_duration = current_time - self.palm_cancel_hold_start
-
-                            if hold_duration >= self.palm_cancel_hold_time:
-                                # Cancel confirmed
-                                self.selected_shape = None
-                                self.shape_start_pos = None
-                                self.shape_preview_active = False
-                                self.shape_cycling = True
-                                self.shape_cycle_start = current_time
-                                self.palm_cancel_hold_start = 0
-                                action = {"type": "shape_cancelled"}
-                            else:
-                                # Show cancel hold progress
-                                progress = hold_duration / self.palm_cancel_hold_time
-                                bar_w = 200
-                                bar_x = (w - bar_w) // 2
-                                bar_y = h // 2 - 50
-
-                                cv2.rectangle(
-                                    frame,
-                                    (bar_x, bar_y),
-                                    (bar_x + bar_w, bar_y + 20),
-                                    (50, 50, 50),
-                                    -1,
-                                )
-                                cv2.rectangle(
-                                    frame,
-                                    (bar_x, bar_y),
-                                    (bar_x + int(bar_w * progress), bar_y + 20),
-                                    (255, 165, 0),
-                                    -1,
-                                )
-                                cv2.putText(
-                                    frame,
-                                    "CANCELING...",
-                                    (bar_x + 40, bar_y - 10),
-                                    cv2.FONT_HERSHEY_SIMPLEX,
-                                    0.5,
-                                    (255, 165, 0),
-                                    2,
-                                )
-                    else:
-                        self.palm_cancel_hold_start = 0
+                elif gesture == "open_palm":
+                    # Open palm - Go back to shape selection (only when shape is selected)
+                    if self.selected_shape:
+                        self.selected_shape = None
+                        self.shape_start_pos = None
+                        self.shape_preview_active = False
+                        self.shape_cycling = True
+                        self.shape_cycle_start = current_time
+                        action = {"type": "shape_cancelled"}
+                        # Visual feedback
+                        cv2.putText(
+                            frame,
+                            "RETURNING TO SELECTION",
+                            (w // 2 - 140, h // 2),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.7,
+                            (255, 165, 0),
+                            2,
+                        )
 
                 elif gesture == "index_point":
                     # Draw/preview selected shape
-                    self.palm_cancel_hold_start = 0
                     if self.selected_shape:
                         if self.shape_start_pos is None:
                             # First point - set start position
@@ -332,7 +287,6 @@ class GesturePainter:
 
                 elif gesture == "fist":
                     # Finalize shape drawing
-                    self.palm_cancel_hold_start = 0
                     if self.selected_shape and self.shape_start_pos is not None:
                         action = {
                             "type": "shape_finalize",
@@ -351,8 +305,6 @@ class GesturePainter:
                 else:
                     # Reset timers for other gestures
                     self.thumbs_up_hold_start = 0
-                    if gesture != "open_palm":
-                        self.palm_cancel_hold_start = 0
 
                 # Auto-cycle through shapes if not selected
                 if not self.selected_shape:
@@ -848,35 +800,15 @@ class GesturePainter:
                         1,
                     )
 
-                # Show cancel instruction (with cooldown info)
-                import time
-
-                current_time = time.time()
-                time_since_selection = current_time - self.shape_selection_time
-
-                if time_since_selection < self.shape_selection_cooldown:
-                    # During cooldown
-                    remaining = self.shape_selection_cooldown - time_since_selection
-                    cv2.putText(
-                        frame,
-                        f"Palm (1s): Change Shape (available in {remaining:.1f}s)",
-                        (w // 2 - 230, h - 130),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.4,
-                        (200, 200, 200),
-                        1,
-                    )
-                else:
-                    # After cooldown
-                    cv2.putText(
-                        frame,
-                        "Palm (1s): Change Shape",
-                        (w // 2 - 110, h - 130),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.45,
-                        (255, 255, 255),
-                        1,
-                    )
+                cv2.putText(
+                    frame,
+                    "Palm: Change Shape",
+                    (w // 2 - 90, h - 130),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.45,
+                    (255, 255, 255),
+                    1,
+                )
 
                 cv2.putText(
                     frame,
@@ -1022,8 +954,8 @@ class GesturePainter:
 
                 cv2.putText(
                     frame,
-                    "OPEN PALM TO SELECT",
-                    (w // 2 - 120, h - 175),
+                    "TWO FINGERS (PEACE) TO SELECT",
+                    (w // 2 - 180, h - 175),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.6,
                     (0, 255, 255),

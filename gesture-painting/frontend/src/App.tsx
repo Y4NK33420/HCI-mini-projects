@@ -512,9 +512,9 @@ function App() {
                       </div>
                     )}
                     
-                    <div className="bg-orange-500/20 border border-orange-500 rounded p-2 mb-2">
-                      <p className="text-xs text-orange-300 font-bold">✋ Palm (Hold 1s): Change Shape</p>
-                      <p className="text-xs text-gray-400 mt-1">⏱️ 1.5s cooldown after selecting</p>
+                    <div className="bg-blue-500/20 border border-blue-500 rounded p-2 mb-2">
+                      <p className="text-xs text-blue-300 font-bold">✋ Open Palm: Change Shape</p>
+                      <p className="text-xs text-gray-400 mt-1">Returns to shape selection</p>
                     </div>
                     <p className="text-xs text-gray-400">👍 Thumbs Up (2s): Exit</p>
                   </div>
@@ -570,7 +570,7 @@ function App() {
                     </div>
                     
                     <div className="bg-cyan-500/20 border border-cyan-500 rounded p-2 mb-2">
-                      <p className="text-xs text-cyan-300 font-bold">✋ OPEN PALM TO SELECT CURRENT SHAPE</p>
+                      <p className="text-xs text-cyan-300 font-bold">✌️ TWO FINGERS (PEACE) TO SELECT</p>
                       <p className="text-xs text-gray-400 mt-1">Watch the progress bar on camera!</p>
                     </div>
                     <p className="text-xs text-gray-400">👍 Thumbs Up (2s): Exit</p>
