@@ -24,8 +24,8 @@ from shared.hand_detector import HandDetector, GestureRecognizer, SwipeDetector
 # Windows-specific imports for overlay window
 if platform.system() == "Windows":
     try:
-        import win32gui
-        import win32con
+        import win32gui  # type: ignore
+        import win32con  # type: ignore
 
         WINDOWS_OVERLAY_AVAILABLE = True
     except ImportError:
@@ -41,7 +41,7 @@ else:
 ENABLE_OVERLAY_MODE = (
     True  # Set to True to enable overlay mode (window stays on top, click-through)
 )
-OVERLAY_OPACITY = 0.85  # Opacity of overlay window (0.0-1.0, lower = more transparent)
+OVERLAY_OPACITY = 0.5  # Opacity of overlay window (0.0-1.0, lower = more transparent)
 
 # HCI: "Clutch" configuration (Feature 3.1)
 CLUTCH_GESTURE_THRESHOLD = 2.0  # Seconds to hold "Thumbs Up" to activate
