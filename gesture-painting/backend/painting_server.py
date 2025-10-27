@@ -40,7 +40,7 @@ class GesturePainter:
         self.mp_draw = mp.solutions.drawing_utils
         
         # State
-        self.current_mode = "idle"  # idle, drawing, erasing
+        self.current_mode = "idle"  # idle, drawing, erasing, shape
         self.current_color = "#00FF00"  # Green
         self.brush_size = 5
         self.eraser_size = 15
@@ -54,6 +54,24 @@ class GesturePainter:
         self.two_hands_hold_time = 2.0  # 2 seconds for clear canvas
         self.two_hands_cooldown = 0
         self.cooldown_duration = 1.0  # 1 second cooldown after action
+        
+        # Undo/Redo state
+        self.last_palm_x = None
+        self.swipe_threshold = 0.3  # 30% of screen width
+        self.swipe_cooldown = 0
+        self.swipe_cooldown_duration = 0.5
+        
+        # Shape mode state
+        self.shape_mode_active = False
+        self.shape_cycling = False
+        self.thumbs_up_hold_start = 0
+        self.thumbs_up_hold_time = 1.0  # 1 second to activate shape mode
+        self.shape_cycle_start = 0
+        self.shape_cycle_interval = 1.5  # Cycle through shapes every 1.5 seconds
+        self.shapes = ["circle", "rectangle", "triangle", "line"]
+        self.current_shape_index = 0
+        self.selected_shape = None
+        self.shape_start_pos = None
         
         # Color palette
         self.colors = [
@@ -140,6 +158,7 @@ class GesturePainter:
             
             # Get index finger tip position (for drawing)
             index_tip = hand_landmarks.landmark[8]
+            thumb_tip = hand_landmarks.landmark[4]
             tip_x = int(index_tip.x * w)
             tip_y = int(index_tip.y * h)
             
@@ -152,92 +171,231 @@ class GesturePainter:
             gesture = self._recognize_gesture(fingers)
             current_time = time.time()
             
-            # Handle gesture
-            if gesture == "index_point":
-                # Drawing mode
-                self.current_mode = "drawing"
-                self.peace_sign_hold_start = 0
-                action = {
-                    "type": "draw",
-                    "position": position,
-                    "color": self.current_color,
-                    "size": self.brush_size
-                }
-                
-                # Visual feedback
-                cv2.circle(frame, (tip_x, tip_y), 15, self._hex_to_bgr(self.current_color), -1)
-                cv2.circle(frame, (tip_x, tip_y), 20, (255, 255, 255), 2)
-                
-            elif gesture == "fist":
-                # Erasing mode
-                self.current_mode = "erasing"
-                self.peace_sign_hold_start = 0
-                action = {
-                    "type": "erase",
-                    "position": position,
-                    "size": self.eraser_size
-                }
-                
-                # Visual feedback
-                cv2.circle(frame, (tip_x, tip_y), self.eraser_size, (0, 0, 0), -1)
-                cv2.circle(frame, (tip_x, tip_y), self.eraser_size + 5, (255, 0, 0), 2)
-                
-            elif gesture == "peace_sign":
-                # Change color (with 1s hold timer + cooldown)
-                # Check if we're in cooldown period
-                if current_time - self.peace_sign_cooldown < self.cooldown_duration:
-                    # Still in cooldown, show message
-                    cv2.putText(frame, "Wait...", (w//2 - 30, h - 100), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
-                else:
-                    if self.peace_sign_hold_start == 0:
-                        self.peace_sign_hold_start = current_time
+            # === SHAPE MODE LOGIC ===
+            if self.shape_mode_active:
+                # We're in shape mode
+                if gesture == "thumbs_up":
+                    # Exit shape mode
+                    if self.thumbs_up_hold_start == 0:
+                        self.thumbs_up_hold_start = current_time
                     
-                    hold_duration = current_time - self.peace_sign_hold_start
-                    
-                    if hold_duration >= self.peace_sign_hold_time:
-                        self.color_index = (self.color_index + 1) % len(self.colors)
-                        self.current_color = self.colors[self.color_index]
-                        action = {
-                            "type": "color_change",
-                            "color": self.current_color
-                        }
-                        self.peace_sign_hold_start = 0
-                        self.peace_sign_cooldown = current_time  # Start cooldown
+                    hold_duration = current_time - self.thumbs_up_hold_start
+                    if hold_duration >= self.thumbs_up_hold_time:
+                        self.shape_mode_active = False
+                        self.shape_cycling = False
+                        self.selected_shape = None
+                        self.thumbs_up_hold_start = 0
+                        action = {"type": "shape_mode_exit"}
                     else:
-                        # Show progress bar
-                        progress = hold_duration / self.peace_sign_hold_time
+                        # Show progress bar for exit
+                        progress = hold_duration / self.thumbs_up_hold_time
                         bar_w = int(w * 0.3)
                         bar_x = (w - bar_w) // 2
-                        bar_y = h - 100
+                        bar_y = 100
                         cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_w, bar_y + 20), (50, 50, 50), -1)
-                        cv2.rectangle(frame, (bar_x, bar_y), (bar_x + int(bar_w * progress), bar_y + 20), (0, 255, 255), -1)
-                        cv2.putText(frame, "CHANGING COLOR...", (bar_x, bar_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
+                        cv2.rectangle(frame, (bar_x, bar_y), (bar_x + int(bar_w * progress), bar_y + 20), (255, 100, 0), -1)
+                        cv2.putText(frame, "EXITING SHAPE MODE...", (bar_x - 50, bar_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 100, 0), 2)
                 
-            elif gesture == "thumb_index":
-                # Adjust size (works for both brush and eraser)
-                self.peace_sign_hold_start = 0
-                thumb_tip = hand_landmarks.landmark[4]
-                distance = np.sqrt((index_tip.x - thumb_tip.x)**2 + (index_tip.y - thumb_tip.y)**2)
-                new_size = int(distance * 50) + 2
+                elif gesture == "open_palm":
+                    # Select current shape
+                    if self.shape_cycling:
+                        self.selected_shape = self.shapes[self.current_shape_index]
+                        self.shape_cycling = False
+                        action = {
+                            "type": "shape_selected",
+                            "shape": self.selected_shape
+                        }
                 
-                if self.current_mode == "drawing":
-                    self.brush_size = new_size
-                elif self.current_mode == "erasing":
-                    self.eraser_size = new_size
+                elif gesture == "two_fingers" or gesture == "thumb_index":
+                    # Draw selected shape
+                    if self.selected_shape:
+                        # Check if this is start or end of shape
+                        if self.shape_start_pos is None:
+                            self.shape_start_pos = position
+                            action = {
+                                "type": "shape_start",
+                                "position": position
+                            }
+                        else:
+                            # Calculate expanding distance
+                            thumb_tip = hand_landmarks.landmark[4]
+                            distance = np.sqrt((index_tip.x - thumb_tip.x)**2 + (index_tip.y - thumb_tip.y)**2)
+                            
+                            # Draw shape
+                            action = {
+                                "type": "shape_draw",
+                                "shape": self.selected_shape,
+                                "start": self.shape_start_pos,
+                                "end": position,
+                                "distance": distance,
+                                "color": self.current_color,
+                                "size": self.brush_size
+                            }
+                        
+                        # Visual feedback
+                        cv2.circle(frame, (tip_x, tip_y), 10, (255, 255, 0), -1)
                 else:
-                    self.brush_size = new_size
-                    
-                action = {
-                    "type": "size_change",
-                    "brush_size": self.brush_size,
-                    "eraser_size": self.eraser_size
-                }
+                    # Reset shape start if hand is released
+                    self.shape_start_pos = None
+                    self.thumbs_up_hold_start = 0
                 
+                # Auto-cycle through shapes if not selected
+                if not self.selected_shape:
+                    if self.shape_cycle_start == 0:
+                        self.shape_cycle_start = current_time
+                    
+                    elapsed = current_time - self.shape_cycle_start
+                    self.current_shape_index = int(elapsed / self.shape_cycle_interval) % len(self.shapes)
+                    self.shape_cycling = True
+            
+            # === NORMAL MODE LOGIC ===
             else:
-                self.current_mode = "idle"
-                # Reset timers when no recognized gesture
-                if gesture != "peace_sign":
+                # Handle gesture
+                if gesture == "thumbs_up":
+                    # Enter shape mode (with 1s hold timer)
+                    if self.thumbs_up_hold_start == 0:
+                        self.thumbs_up_hold_start = current_time
+                    
+                    hold_duration = current_time - self.thumbs_up_hold_start
+                    
+                    if hold_duration >= self.thumbs_up_hold_time:
+                        self.shape_mode_active = True
+                        self.shape_cycle_start = 0
+                        self.current_shape_index = 0
+                        self.thumbs_up_hold_start = 0
+                        action = {"type": "shape_mode_enter"}
+                    else:
+                        # Show progress bar
+                        progress = hold_duration / self.thumbs_up_hold_time
+                        bar_w = int(w * 0.3)
+                        bar_x = (w - bar_w) // 2
+                        bar_y = 100
+                        cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_w, bar_y + 20), (50, 50, 50), -1)
+                        cv2.rectangle(frame, (bar_x, bar_y), (bar_x + int(bar_w * progress), bar_y + 20), (255, 165, 0), -1)
+                        cv2.putText(frame, "SHAPE MODE...", (bar_x, bar_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 165, 0), 2)
+                
+                elif gesture == "open_palm":
+                    # Swipe detection for undo/redo
+                    self.thumbs_up_hold_start = 0
+                    palm_x = norm_x
+                    
+                    if current_time - self.swipe_cooldown > self.swipe_cooldown_duration:
+                        if self.last_palm_x is not None:
+                            delta_x = palm_x - self.last_palm_x
+                            
+                            # Swipe left = undo
+                            if delta_x < -self.swipe_threshold:
+                                action = {"type": "undo"}
+                                self.swipe_cooldown = current_time
+                                self.last_palm_x = None
+                            # Swipe right = redo
+                            elif delta_x > self.swipe_threshold:
+                                action = {"type": "redo"}
+                                self.swipe_cooldown = current_time
+                                self.last_palm_x = None
+                            else:
+                                self.last_palm_x = palm_x
+                        else:
+                            self.last_palm_x = palm_x
+                    else:
+                        self.last_palm_x = None
+                
+                elif gesture == "index_point":
+                    # Drawing mode
+                    self.current_mode = "drawing"
                     self.peace_sign_hold_start = 0
+                    self.thumbs_up_hold_start = 0
+                    self.last_palm_x = None
+                    action = {
+                        "type": "draw",
+                        "position": position,
+                        "color": self.current_color,
+                        "size": self.brush_size
+                    }
+                    
+                    # Visual feedback
+                    cv2.circle(frame, (tip_x, tip_y), 15, self._hex_to_bgr(self.current_color), -1)
+                    cv2.circle(frame, (tip_x, tip_y), 20, (255, 255, 255), 2)
+                    
+                elif gesture == "fist":
+                    # Erasing mode
+                    self.current_mode = "erasing"
+                    self.peace_sign_hold_start = 0
+                    self.thumbs_up_hold_start = 0
+                    self.last_palm_x = None
+                    action = {
+                        "type": "erase",
+                        "position": position,
+                        "size": self.eraser_size
+                    }
+                    
+                    # Visual feedback
+                    cv2.circle(frame, (tip_x, tip_y), self.eraser_size, (0, 0, 0), -1)
+                    cv2.circle(frame, (tip_x, tip_y), self.eraser_size + 5, (255, 0, 0), 2)
+                    
+                elif gesture == "peace_sign":
+                    # Change color (with 1s hold timer + cooldown)
+                    self.thumbs_up_hold_start = 0
+                    self.last_palm_x = None
+                    # Check if we're in cooldown period
+                    if current_time - self.peace_sign_cooldown < self.cooldown_duration:
+                        # Still in cooldown, show message
+                        cv2.putText(frame, "Wait...", (w//2 - 30, h - 100), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+                    else:
+                        if self.peace_sign_hold_start == 0:
+                            self.peace_sign_hold_start = current_time
+                        
+                        hold_duration = current_time - self.peace_sign_hold_start
+                        
+                        if hold_duration >= self.peace_sign_hold_time:
+                            self.color_index = (self.color_index + 1) % len(self.colors)
+                            self.current_color = self.colors[self.color_index]
+                            action = {
+                                "type": "color_change",
+                                "color": self.current_color
+                            }
+                            self.peace_sign_hold_start = 0
+                            self.peace_sign_cooldown = current_time  # Start cooldown
+                        else:
+                            # Show progress bar
+                            progress = hold_duration / self.peace_sign_hold_time
+                            bar_w = int(w * 0.3)
+                            bar_x = (w - bar_w) // 2
+                            bar_y = h - 100
+                            cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_w, bar_y + 20), (50, 50, 50), -1)
+                            cv2.rectangle(frame, (bar_x, bar_y), (bar_x + int(bar_w * progress), bar_y + 20), (0, 255, 255), -1)
+                            cv2.putText(frame, "CHANGING COLOR...", (bar_x, bar_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
+                    
+                elif gesture == "thumb_index":
+                    # Adjust size (works for both brush and eraser)
+                    self.peace_sign_hold_start = 0
+                    self.thumbs_up_hold_start = 0
+                    self.last_palm_x = None
+                    thumb_tip = hand_landmarks.landmark[4]
+                    distance = np.sqrt((index_tip.x - thumb_tip.x)**2 + (index_tip.y - thumb_tip.y)**2)
+                    new_size = int(distance * 50) + 2
+                    
+                    if self.current_mode == "drawing":
+                        self.brush_size = new_size
+                    elif self.current_mode == "erasing":
+                        self.eraser_size = new_size
+                    else:
+                        self.brush_size = new_size
+                        
+                    action = {
+                        "type": "size_change",
+                        "brush_size": self.brush_size,
+                        "eraser_size": self.eraser_size
+                    }
+                    
+                else:
+                    self.current_mode = "idle"
+                    self.last_palm_x = None
+                    # Reset timers when no recognized gesture
+                    if gesture != "peace_sign":
+                        self.peace_sign_hold_start = 0
+                    if gesture != "thumbs_up":
+                        self.thumbs_up_hold_start = 0
         
         else:
             # No hands detected
@@ -254,7 +412,11 @@ class GesturePainter:
             "brush_size": self.brush_size,
             "eraser_size": self.eraser_size,
             "action": action,
-            "position": position
+            "position": position,
+            "shape_mode_active": self.shape_mode_active,
+            "shape_cycling": self.shape_cycling,
+            "current_shape": self.shapes[self.current_shape_index] if self.shape_cycling else None,
+            "selected_shape": self.selected_shape
         }
     
     def _get_fingers_up(self, hand_landmarks):
@@ -290,6 +452,10 @@ class GesturePainter:
             return "open_palm"
         elif fingers == [1, 1, 0, 0, 0]:
             return "thumb_index"
+        elif fingers == [1, 0, 0, 0, 0]:
+            return "thumbs_up"
+        elif fingers == [0, 1, 1, 1, 0] or fingers == [0, 1, 1, 1, 1]:
+            return "two_fingers"
         else:
             return "unknown"
     
@@ -309,8 +475,12 @@ class GesturePainter:
         cv2.rectangle(frame, (0, 0), (w, 60), (40, 40, 40), -1)
         
         # Mode indicator
-        mode_text = f"Mode: {self.current_mode.upper()}"
-        color = (0, 255, 0) if self.current_mode == "drawing" else (0, 0, 255) if self.current_mode == "erasing" else (200, 200, 200)
+        if self.shape_mode_active:
+            mode_text = "SHAPE MODE"
+            color = (255, 165, 0)
+        else:
+            mode_text = f"Mode: {self.current_mode.upper()}"
+            color = (0, 255, 0) if self.current_mode == "drawing" else (0, 0, 255) if self.current_mode == "erasing" else (200, 200, 200)
         cv2.putText(frame, mode_text, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 2)
         
         # Current color
@@ -320,19 +490,46 @@ class GesturePainter:
         # Brush and eraser size
         cv2.putText(frame, f"B:{self.brush_size} E:{self.eraser_size}", (w - 190, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
         
-        # Instructions
-        instructions = [
-            "Index: Draw",
-            "Fist: Erase",
-            "Peace (1s): Color",
-            "Two Hands (2s): Clear",
-            "Pinch: Size"
-        ]
+        # Shape mode info overlay
+        if self.shape_mode_active:
+            # Large shape mode banner
+            cv2.rectangle(frame, (w//2 - 200, h - 250), (w//2 + 200, h - 150), (40, 40, 40), -1)
+            cv2.rectangle(frame, (w//2 - 200, h - 250), (w//2 + 200, h - 150), (255, 165, 0), 3)
+            
+            if self.selected_shape:
+                # Shape selected
+                cv2.putText(frame, f"Selected: {self.selected_shape.upper()}", 
+                           (w//2 - 150, h - 210), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                cv2.putText(frame, "Two Fingers/Pinch: Draw", 
+                           (w//2 - 150, h - 180), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                cv2.putText(frame, "Thumbs Up (1s): Exit", 
+                           (w//2 - 150, h - 160), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            else:
+                # Cycling through shapes
+                current_shape_name = self.shapes[self.current_shape_index].upper()
+                cv2.putText(frame, f">>> {current_shape_name} <<<", 
+                           (w//2 - 100, h - 210), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 0), 2)
+                cv2.putText(frame, "Open Palm: SELECT", 
+                           (w//2 - 120, h - 180), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                cv2.putText(frame, "Thumbs Up (1s): Exit", 
+                           (w//2 - 120, h - 160), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
-        y_offset = h - 150
-        for instruction in instructions:
-            cv2.putText(frame, instruction, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            y_offset += 25
+        # Instructions (normal mode)
+        else:
+            instructions = [
+                "Index: Draw",
+                "Fist: Erase",
+                "Peace (1s): Color",
+                "Two Hands (2s): Clear",
+                "Pinch: Size",
+                "Thumbs Up (1s): Shapes",
+                "Palm Swipe L/R: Undo/Redo"
+            ]
+            
+            y_offset = h - 200
+            for instruction in instructions:
+                cv2.putText(frame, instruction, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                y_offset += 25
 
 
 # Global painter instance

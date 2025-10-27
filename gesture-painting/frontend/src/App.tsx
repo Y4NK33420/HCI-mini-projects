@@ -8,6 +8,10 @@ interface GestureData {
   eraser_size: number;
   action: any;
   position: { x: number; y: number } | null;
+  shape_mode_active: boolean;
+  shape_cycling: boolean;
+  current_shape: string | null;
+  selected_shape: string | null;
 }
 
 interface WebSocketMessage {
@@ -28,6 +32,11 @@ function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
   const lastPosRef = useRef<{ x: number; y: number } | null>(null);
+  
+  // Undo/Redo history
+  const historyRef = useRef<string[]>([]);
+  const historyIndexRef = useRef<number>(-1);
+  const maxHistorySize = 50;
 
   // Initialize canvas
   useEffect(() => {
@@ -42,9 +51,103 @@ function App() {
         // Fill with white background
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Save initial state
+        saveToHistory();
       }
     }
   }, []);
+  
+  // Save canvas state to history
+  const saveToHistory = () => {
+    if (!canvasRef.current) return;
+    
+    const dataUrl = canvasRef.current.toDataURL();
+    
+    // Remove any states after current index (for redo)
+    historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
+    
+    // Add new state
+    historyRef.current.push(dataUrl);
+    
+    // Limit history size
+    if (historyRef.current.length > maxHistorySize) {
+      historyRef.current.shift();
+    } else {
+      historyIndexRef.current++;
+    }
+  };
+  
+  // Restore canvas from history
+  const restoreFromHistory = (index: number) => {
+    if (!canvasRef.current || !ctxRef.current) return;
+    if (index < 0 || index >= historyRef.current.length) return;
+    
+    const img = new Image();
+    img.onload = () => {
+      if (ctxRef.current && canvasRef.current) {
+        ctxRef.current.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        ctxRef.current.drawImage(img, 0, 0);
+      }
+    };
+    img.src = historyRef.current[index];
+    historyIndexRef.current = index;
+  };
+  
+  // Undo action
+  const undo = () => {
+    if (historyIndexRef.current > 0) {
+      restoreFromHistory(historyIndexRef.current - 1);
+    }
+  };
+  
+  // Redo action
+  const redo = () => {
+    if (historyIndexRef.current < historyRef.current.length - 1) {
+      restoreFromHistory(historyIndexRef.current + 1);
+    }
+  };
+  
+  // Draw shape helper
+  const drawShape = (shape: string, start: {x: number, y: number}, end: {x: number, y: number}, color: string, size: number) => {
+    if (!canvasRef.current || !ctxRef.current) return;
+    
+    const canvas = canvasRef.current;
+    const ctx = ctxRef.current;
+    
+    const startX = start.x * canvas.width;
+    const startY = start.y * canvas.height;
+    const endX = end.x * canvas.width;
+    const endY = end.y * canvas.height;
+    
+    ctx.strokeStyle = color;
+    ctx.lineWidth = size;
+    ctx.fillStyle = color + '40'; // Semi-transparent fill
+    
+    ctx.beginPath();
+    
+    if (shape === 'circle') {
+      const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+      ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
+      ctx.stroke();
+    } else if (shape === 'rectangle') {
+      const width = endX - startX;
+      const height = endY - startY;
+      ctx.rect(startX, startY, width, height);
+      ctx.stroke();
+    } else if (shape === 'triangle') {
+      const midX = startX + (endX - startX) / 2;
+      ctx.moveTo(midX, startY);
+      ctx.lineTo(endX, endY);
+      ctx.lineTo(startX, endY);
+      ctx.closePath();
+      ctx.stroke();
+    } else if (shape === 'line') {
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(endX, endY);
+      ctx.stroke();
+    }
+  };
 
   // Connect to WebSocket
   useEffect(() => {
@@ -103,6 +206,7 @@ function App() {
             ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             lastPosRef.current = null;
+            saveToHistory();
             
           } else if (action.type === 'color_change') {
             // Update current color
@@ -112,11 +216,40 @@ function App() {
             // Update both brush and eraser sizes
             if (action.brush_size !== undefined) setBrushSize(action.brush_size);
             if (action.eraser_size !== undefined) setEraserSize(action.eraser_size);
+            
+          } else if (action.type === 'undo') {
+            // Undo last action
+            undo();
+            
+          } else if (action.type === 'redo') {
+            // Redo last undone action
+            redo();
+            
+          } else if (action.type === 'shape_mode_enter') {
+            // Entered shape mode
+            console.log('🔷 Shape mode activated');
+            
+          } else if (action.type === 'shape_mode_exit') {
+            // Exited shape mode
+            console.log('🔷 Shape mode exited');
+            
+          } else if (action.type === 'shape_selected') {
+            // Shape selected
+            console.log('🔷 Shape selected:', action.shape);
+            
+          } else if (action.type === 'shape_draw') {
+            // Draw shape
+            drawShape(action.shape, action.start, action.end, action.color, action.size);
+            saveToHistory();
           }
         }
         
-        // Reset last position if not drawing
-        if (!data.gesture_data.action || data.gesture_data.action.type !== 'draw') {
+        // Reset last position and save to history when action completes
+        if (!data.gesture_data.action || (data.gesture_data.action.type !== 'draw' && data.gesture_data.action.type !== 'erase')) {
+          if (lastPosRef.current !== null) {
+            // User just finished drawing/erasing, save to history
+            saveToHistory();
+          }
           lastPosRef.current = null;
         }
       };
@@ -162,6 +295,7 @@ function App() {
 
   const getModeColor = () => {
     if (!gestureData) return 'bg-gray-500';
+    if (gestureData.shape_mode_active) return 'bg-orange-500';
     if (gestureData.mode === 'drawing') return 'bg-green-500';
     if (gestureData.mode === 'erasing') return 'bg-red-500';
     return 'bg-gray-500';
@@ -169,6 +303,7 @@ function App() {
 
   const getModeText = () => {
     if (!gestureData) return 'IDLE';
+    if (gestureData.shape_mode_active) return '🔷 SHAPE MODE';
     return gestureData.mode.toUpperCase();
   };
 
@@ -255,6 +390,14 @@ function App() {
                   <span>Peace (1s) → Color</span>
                 </div>
                 <div className="flex items-center gap-2">
+                  <span className="text-lg">👍</span>
+                  <span>Thumbs Up (1s) → Shapes</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">✋</span>
+                  <span>Palm Swipe L/R → Undo/Redo</span>
+                </div>
+                <div className="flex items-center gap-2">
                   <span className="text-lg">✋✋</span>
                   <span>Two Hands (2s) → Clear</span>
                 </div>
@@ -264,6 +407,30 @@ function App() {
                 </div>
               </div>
             </div>
+            
+            {/* Shape Mode Indicator */}
+            {gestureData?.shape_mode_active && (
+              <div className="bg-gradient-to-br from-orange-500/30 to-yellow-500/30 border-2 border-orange-500/50 rounded-lg p-3 mt-3">
+                <h3 className="font-bold text-orange-300 mb-2 text-center">🔷 SHAPE MODE ACTIVE</h3>
+                {gestureData.selected_shape ? (
+                  <div className="text-center">
+                    <p className="text-green-300 font-bold text-lg mb-1">
+                      ✓ {gestureData.selected_shape.toUpperCase()}
+                    </p>
+                    <p className="text-xs text-gray-300">Two Fingers/Pinch: Draw</p>
+                    <p className="text-xs text-gray-300">Thumbs Up (1s): Exit</p>
+                  </div>
+                ) : gestureData.current_shape ? (
+                  <div className="text-center">
+                    <p className="text-yellow-300 font-bold text-lg animate-pulse mb-1">
+                      ≫ {gestureData.current_shape.toUpperCase()} ≪
+                    </p>
+                    <p className="text-xs text-cyan-300 font-bold">OPEN PALM TO SELECT</p>
+                    <p className="text-xs text-gray-300">Thumbs Up (1s): Exit</p>
+                  </div>
+                ) : null}
+              </div>
+            )}
 
             {/* Actions */}
             <div className="mt-4 space-y-2">
