@@ -502,18 +502,21 @@ function App() {
                       </div>
                     </div>
                     {gestureData.shape_preview_active ? (
-                      <div className="bg-yellow-500/20 border border-yellow-500 rounded p-2">
+                      <div className="bg-yellow-500/20 border border-yellow-500 rounded p-2 mb-2">
                         <p className="text-xs text-yellow-300 font-bold mb-1">📐 DRAWING SHAPE...</p>
-                        <p className="text-xs text-gray-300">✊ Fist: Finalize</p>
-                        <p className="text-xs text-gray-300">✋ Palm: Cancel</p>
+                        <p className="text-xs text-gray-300">✊ Fist: Finalize Shape</p>
                       </div>
                     ) : (
-                      <>
-                        <p className="text-xs text-gray-300">☝️ Index: Start Drawing</p>
-                        <p className="text-xs text-gray-300">✋ Palm: Change Shape</p>
-                      </>
+                      <div className="mb-2">
+                        <p className="text-xs text-gray-300 mb-1">☝️ Index: Start Drawing</p>
+                      </div>
                     )}
-                    <p className="text-xs text-gray-400 mt-2">👍 Thumbs Up (2s): Exit</p>
+                    
+                    <div className="bg-orange-500/20 border border-orange-500 rounded p-2 mb-2">
+                      <p className="text-xs text-orange-300 font-bold">✋ Palm (Hold 1s): Change Shape</p>
+                      <p className="text-xs text-gray-400 mt-1">⏱️ 1.5s cooldown after selecting</p>
+                    </div>
+                    <p className="text-xs text-gray-400">👍 Thumbs Up (2s): Exit</p>
                   </div>
                 ) : gestureData.current_shape ? (
                   <div className="text-center">
