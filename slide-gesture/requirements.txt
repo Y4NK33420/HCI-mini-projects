@@ -1,0 +1,29 @@
+# Core dependencies
+opencv-python>=4.8.0
+pyautogui>=0.9.50
+numpy>=1.24.0,<2.0.0
+
+# MediaPipe - NOTE: Requires Python 3.11 or lower
+# If you're using Python 3.12+, you'll need to create a new venv with Python 3.11
+# mediapipe>=0.10.0
+
+# Web framework dependencies
+streamlit>=1.28.0
+fastapi>=0.100.0
+uvicorn>=0.23.0
+websockets>=12.0
+python-multipart>=0.0.6
+
+# PDF handling
+PyPDF2>=3.0.0
+PyMuPDF>=1.23.0
+
+# Image processing
+pillow>=10.0.0
+
+# Async file handling
+aiofiles>=23.2.0
+
+# Video streaming for Streamlit (optional)
+# streamlit-webrtc>=0.47.0
+
