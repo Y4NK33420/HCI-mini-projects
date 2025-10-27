@@ -12,6 +12,7 @@ interface GestureData {
   shape_cycling: boolean;
   current_shape: string | null;
   selected_shape: string | null;
+  shape_preview_active: boolean;
 }
 
 interface WebSocketMessage {
@@ -37,8 +38,12 @@ function App() {
   const historyRef = useRef<string[]>([]);
   const historyIndexRef = useRef<number>(-1);
   const maxHistorySize = 50;
+  
+  // Shape preview state
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const previewCtxRef = useRef<CanvasRenderingContext2D | null>(null);
 
-  // Initialize canvas
+  // Initialize canvases
   useEffect(() => {
     if (canvasRef.current) {
       const canvas = canvasRef.current;
@@ -54,6 +59,16 @@ function App() {
         
         // Save initial state
         saveToHistory();
+      }
+    }
+    
+    // Initialize preview canvas
+    if (previewCanvasRef.current) {
+      const previewCtx = previewCanvasRef.current.getContext('2d');
+      if (previewCtx) {
+        previewCtx.lineCap = 'round';
+        previewCtx.lineJoin = 'round';
+        previewCtxRef.current = previewCtx;
       }
     }
   }, []);
@@ -108,32 +123,45 @@ function App() {
     }
   };
   
-  // Draw shape helper
-  const drawShape = (shape: string, start: {x: number, y: number}, end: {x: number, y: number}, color: string, size: number) => {
-    if (!canvasRef.current || !ctxRef.current) return;
-    
-    const canvas = canvasRef.current;
-    const ctx = ctxRef.current;
-    
+  // Draw shape helper (works on any canvas)
+  const drawShape = (
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    shape: string,
+    start: {x: number, y: number},
+    end: {x: number, y: number},
+    color: string,
+    size: number,
+    preview: boolean = false
+  ) => {
     const startX = start.x * canvas.width;
     const startY = start.y * canvas.height;
     const endX = end.x * canvas.width;
     const endY = end.y * canvas.height;
     
+    ctx.save();
     ctx.strokeStyle = color;
     ctx.lineWidth = size;
-    ctx.fillStyle = color + '40'; // Semi-transparent fill
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    
+    // Add semi-transparent fill for preview only
+    if (preview) {
+      ctx.fillStyle = color + '30';
+    }
     
     ctx.beginPath();
     
     if (shape === 'circle') {
       const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
       ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
+      if (preview) ctx.fill();
       ctx.stroke();
     } else if (shape === 'rectangle') {
       const width = endX - startX;
       const height = endY - startY;
       ctx.rect(startX, startY, width, height);
+      if (preview) ctx.fill();
       ctx.stroke();
     } else if (shape === 'triangle') {
       const midX = startX + (endX - startX) / 2;
@@ -141,12 +169,15 @@ function App() {
       ctx.lineTo(endX, endY);
       ctx.lineTo(startX, endY);
       ctx.closePath();
+      if (preview) ctx.fill();
       ctx.stroke();
     } else if (shape === 'line') {
       ctx.moveTo(startX, startY);
       ctx.lineTo(endX, endY);
       ctx.stroke();
     }
+    
+    ctx.restore();
   };
 
   // Connect to WebSocket
@@ -232,15 +263,51 @@ function App() {
           } else if (action.type === 'shape_mode_exit') {
             // Exited shape mode
             console.log('🔷 Shape mode exited');
+            // Clear preview canvas
+            if (previewCanvasRef.current && previewCtxRef.current) {
+              previewCtxRef.current.clearRect(0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
+            }
             
           } else if (action.type === 'shape_selected') {
             // Shape selected
             console.log('🔷 Shape selected:', action.shape);
+            // Clear preview canvas
+            if (previewCanvasRef.current && previewCtxRef.current) {
+              previewCtxRef.current.clearRect(0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
+            }
             
-          } else if (action.type === 'shape_draw') {
-            // Draw shape
-            drawShape(action.shape, action.start, action.end, action.color, action.size);
-            saveToHistory();
+          } else if (action.type === 'shape_cancelled') {
+            // Shape cancelled
+            console.log('🔷 Shape cancelled');
+            // Clear preview canvas
+            if (previewCanvasRef.current && previewCtxRef.current) {
+              previewCtxRef.current.clearRect(0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
+            }
+            
+          } else if (action.type === 'shape_start') {
+            // Shape drawing started
+            console.log('🔷 Shape start at:', action.position);
+            
+          } else if (action.type === 'shape_preview') {
+            // Preview shape in real-time
+            if (previewCanvasRef.current && previewCtxRef.current) {
+              // Clear preview canvas
+              previewCtxRef.current.clearRect(0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
+              // Draw shape preview
+              drawShape(previewCtxRef.current, previewCanvasRef.current, action.shape, action.start, action.end, action.color, action.size, true);
+            }
+            
+          } else if (action.type === 'shape_finalize') {
+            // Finalize shape - draw on main canvas
+            if (ctxRef.current && canvasRef.current) {
+              drawShape(ctxRef.current, canvasRef.current, action.shape, action.start, action.end, action.color, action.size, false);
+              saveToHistory();
+            }
+            // Clear preview canvas
+            if (previewCanvasRef.current && previewCtxRef.current) {
+              previewCtxRef.current.clearRect(0, 0, previewCanvasRef.current.width, previewCanvasRef.current.height);
+            }
+            console.log('🔷 Shape finalized:', action.shape);
           }
         }
         
@@ -417,16 +484,27 @@ function App() {
                     <p className="text-green-300 font-bold text-lg mb-1">
                       ✓ {gestureData.selected_shape.toUpperCase()}
                     </p>
-                    <p className="text-xs text-gray-300">Two Fingers/Pinch: Draw</p>
-                    <p className="text-xs text-gray-300">Thumbs Up (1s): Exit</p>
+                    {gestureData.shape_preview_active ? (
+                      <>
+                        <p className="text-xs text-yellow-300 font-bold mb-1">📐 DRAWING SHAPE...</p>
+                        <p className="text-xs text-gray-300">✊ Fist: Finalize</p>
+                        <p className="text-xs text-gray-300">✋ Palm: Cancel</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-xs text-gray-300">☝️ Index: Start Drawing</p>
+                        <p className="text-xs text-gray-300">✋ Palm: Change Shape</p>
+                      </>
+                    )}
+                    <p className="text-xs text-gray-400 mt-1">👍 Thumbs Up (1s): Exit</p>
                   </div>
                 ) : gestureData.current_shape ? (
                   <div className="text-center">
                     <p className="text-yellow-300 font-bold text-lg animate-pulse mb-1">
                       ≫ {gestureData.current_shape.toUpperCase()} ≪
                     </p>
-                    <p className="text-xs text-cyan-300 font-bold">OPEN PALM TO SELECT</p>
-                    <p className="text-xs text-gray-300">Thumbs Up (1s): Exit</p>
+                    <p className="text-xs text-cyan-300 font-bold">✋ OPEN PALM TO SELECT</p>
+                    <p className="text-xs text-gray-400 mt-1">👍 Thumbs Up (1s): Exit</p>
                   </div>
                 ) : null}
               </div>
@@ -467,6 +545,19 @@ function App() {
                 width={1400}
                 height={800}
                 className="max-w-full max-h-full bg-white rounded shadow-2xl"
+              />
+              
+              {/* Preview Canvas Overlay - for shape preview */}
+              <canvas
+                ref={previewCanvasRef}
+                width={1400}
+                height={800}
+                className="max-w-full max-h-full absolute pointer-events-none"
+                style={{
+                  left: '50%',
+                  top: '50%',
+                  transform: 'translate(-50%, -50%)',
+                }}
               />
               
               {/* Cursor Overlay - shows where user is pointing */}
